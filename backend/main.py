@@ -1,13 +1,14 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from tensorflow.keras.models import load_model
+from huggingface_hub import hf_hub_download
 from PIL import Image
 import numpy as np
 import io
 
 app = FastAPI()
 
-# Allow Lovable frontend to communicate with FastAPI
+# Allow frontend to communicate with FastAPI
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -19,8 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load trained model
-model = load_model("../model/crop_disease_model.keras")
+# Download trained model from Hugging Face
+model_path = hf_hub_download(
+    repo_id="creator-hub1/crop-disease-model",
+    filename="crop_disease_model.keras"
+)
+
+# Load model
+model = load_model(model_path)
 
 # Class names
 class_names = [
@@ -29,11 +36,13 @@ class_names = [
     "Tomato_healthy"
 ]
 
+
 @app.get("/")
 def home():
     return {
         "message": "AI Crop Disease Identifier API is working!"
     }
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -53,7 +62,7 @@ async def predict(file: UploadFile = File(...)):
     # Add batch dimension
     image_array = np.expand_dims(image_array, axis=0)
 
-    # Prediction
+    # Make prediction
     predictions = model.predict(image_array)
 
     predicted_index = np.argmax(predictions[0])
