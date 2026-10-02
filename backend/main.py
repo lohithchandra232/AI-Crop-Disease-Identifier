@@ -50,8 +50,7 @@ async def predict(file: UploadFile = File(...)):
 
     image_array = np.array(
         image,
-        dtype=np.float32
-    ) / 255.0
+        dtype=np.float32)
 
     image_array = np.expand_dims(
         image_array,
@@ -76,3 +75,4 @@ async def predict(file: UploadFile = File(...)):
         "prediction": class_names[predicted_index],
         "confidence": round(confidence * 100, 2)
     }
+
