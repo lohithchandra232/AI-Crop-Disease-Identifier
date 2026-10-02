@@ -1,14 +1,12 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from tensorflow.keras.models import load_model
-from huggingface_hub import hf_hub_download
 from PIL import Image
 import numpy as np
+from ai_edge_litert.interpreter import Interpreter
 import io
 
 app = FastAPI()
 
-# Allow frontend to communicate with FastAPI
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -20,22 +18,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Download trained model from Hugging Face
-model_path = hf_hub_download(
-    repo_id="creator-hub1/crop-disease-model",
-    filename="crop_disease_model.keras"
-)
+model_path = "model/crop_disease_model.tflite"
 
-# Load model
-model = load_model(model_path)
+interpreter = Interpreter(model_path=model_path)
+interpreter.allocate_tensors()
 
-# Class names
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
 class_names = [
     "Tomato_Early_blight",
     "Tomato_Late_blight",
     "Tomato_healthy"
 ]
-
 
 @app.get("/")
 def home():
@@ -43,30 +38,39 @@ def home():
         "message": "AI Crop Disease Identifier API is working!"
     }
 
-
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-
-    # Read uploaded image
     image_data = await file.read()
 
-    # Open image
-    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    image = Image.open(
+        io.BytesIO(image_data)
+    ).convert("RGB")
 
-    # Resize image
     image = image.resize((224, 224))
 
-    # Convert image to array
-    image_array = np.array(image) / 255.0
+    image_array = np.array(
+        image,
+        dtype=np.float32
+    ) / 255.0
 
-    # Add batch dimension
-    image_array = np.expand_dims(image_array, axis=0)
+    image_array = np.expand_dims(
+        image_array,
+        axis=0
+    )
 
-    # Make prediction
-    predictions = model.predict(image_array)
+    interpreter.set_tensor(
+        input_details[0]["index"],
+        image_array
+    )
 
-    predicted_index = np.argmax(predictions[0])
-    confidence = float(np.max(predictions[0]))
+    interpreter.invoke()
+
+    predictions = interpreter.get_tensor(
+        output_details[0]["index"]
+    )[0]
+
+    predicted_index = np.argmax(predictions)
+    confidence = float(np.max(predictions))
 
     return {
         "prediction": class_names[predicted_index],
